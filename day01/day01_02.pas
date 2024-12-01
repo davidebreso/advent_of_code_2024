@@ -1,5 +1,5 @@
-{************ ADVENT OF CODE -- DAY 1 -- PROBLEM 1 ************}
-program Day01_01;
+{************ ADVENT OF CODE -- DAY 1 -- PROBLEM 2 ************}
+program Day01_02;
 
 uses	Crt;
 
