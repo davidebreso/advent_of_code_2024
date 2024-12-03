@@ -84,16 +84,9 @@ Start:
 ;------ Print result
 
 @@40:
-        mov     ax, [sumH]              ; Convert [sumH] to hex
-        mov     di, offset fileName     ; Point di to string buffer
-        mov     cx, 1                   ; Al least one digit
-        call    BinToAscHex             ; Conver to ASCII hex
-        call    StrWrite                ; Print result
-        mov     di, offset fileName     ; Point di to string buffer
-        mov     cx, 4                   ; Al least four digits
-        mov     ax, [sumL]              ; Convert low byte of result
-        call    BinToAscHex             ;   to ASCII hex
-        call    StrWrite                ; Print low byte
+        mov     dx, [sumH]              ; Move result to DX:AX
+        mov     ax, [sumL]
+        call    PrintLongInt            ; Print result
         call    NewLine                 ;   followed by newline
 
 ;------ Close the input file, witch is not strictly required as ending
@@ -197,5 +190,39 @@ PROC    DoTransition
         mov     [state], bl             ; Store next state
         ret                             ; Return to caller
 ENDP    DoTransition
+%NEWPAGE
+;---------------------------------------------------------------------
+; PrintLongInt          Print a 32 bit integer to screen
+;---------------------------------------------------------------------
+; Input:
+;       DX:AX           32 bit integer to print
+; Ouput:
+;       print number to screen
+; Registers:
+;       ax, bx, cx, dx
+;---------------------------------------------------------------------
+PROC    PrintLongInt
+        mov     bx, 10          ; Print as decimal number
+        push    bx              ; Push sentinel to stack
+@@10:
+        mov     cx, ax          ; Temporarily store LowDividend in CX
+        mov     ax, dx          ; First divide the HighDividend
+        xor     dx, dx          ; Setup for division DX:AX / BX
+        div     bx              ;  -> AX is HighQuotient, Reminder is reused
+        xchg    ax, cx          ; Temp. move it to CX, restore LowDividend
+        div     bx              ;  -> AX is LowQuotient, Reminder DX=[0,9]
+        push    dx              ; Save reminder for now
+        mov     dx, cx          ; Build true 32-bit quotient in DX:AX
+        or      cx, ax          ; Is the true 32-bit quotient zero?
+        jnz     @@10            ; No, use as next dividend
+        pop     dx              ; First pop (is digit for sure)
+@@20:
+        add     dl, '0'         ; Turn into character
+        mov     ah, 02h         ; DOS DisplayCharacter
+        int     21h             ; Call DOS to display digit
+        pop     dx              ; All remaining pops
+        cmp     dx, bx          ; Was it the sentinel?
+        jb      @@20            ; Not yet, loop
+ENDP    PrintLongInt
 
         END     Start           ; End of program / entry point
