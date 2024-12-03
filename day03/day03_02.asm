@@ -1,4 +1,4 @@
-%TITLE "Advent of Code 2024 -- Day 3 -- Problem 1"
+%TITLE "Advent of Code 2024 -- Day 3 -- Problem 2"
 
         IDEAL
 
@@ -24,6 +24,11 @@ trans           DB      0,      'm'     ; 0: Search for 'm'
                 DB      4,      ','     ; 4: Search for X digit or ','
                 DB      5,      ')'     ; 5: Search for Y digit or ')'
 ;----------------------------------------------------------------------
+strDo           DB      'do()',0        ; String to search for 'do()'
+ptrDo           DW      offset strDo    ; Pointer to next char to search
+strDont         DB      'don''t()',0    ; String to search for "don't()"
+ptrDont         DW      offset strDont  ; Pointer to next char to search
+doMul           DB      1               ; 1: Mul enabled, 0: Mul disabled
 intX            DW      0               ; First argument of mul(X,Y)
 intY            DW      0               ; Second argument of mul(X,Y)
 intZ            DW      0               ; High byte for X * Y
@@ -115,12 +120,14 @@ Errors:
 ; Input:
 ;       [oneByte]       Next char to consume
 ;       [state]         Current state of DFA
+;       [ptrDo], [ptrDont]      pointer to Do/Don't string
 ; Ouput:
-;       [state]         Offset of next state of DFA
+;       [state]         Next state of DFA
+;       [ptrDo], [ptrDont]      pointer to Do/Don't string
 ;       [intX], [intY]  Arguments of mul(X,Y)
 ;       [sumH], [sumL]  Updated by adding X * Y
 ; Registers:
-;       ax, bx, cx, dx
+;       ax, bx, cx, dx, di, si
 ;---------------------------------------------------------------------
 PROC    DoTransition
         mov     dl, [oneByte]           ; Load input char in DL
@@ -130,6 +137,28 @@ PROC    DoTransition
         mov     ax, [word ptr trans + bx]  ; Load delta in AX
         xor     cx, cx                  ; Zero CX for later
 
+;------ Search for Do/Don't string
+        mov     di, [ptrDo]             ; DI points to next char in strDo
+        mov     si, [ptrDont]           ; SI points to next char in strDont
+        cmp     dl, 'd'                 ; Is current char == 'd' ?
+        jne     @@01                    ;   No, jump
+        mov     di, offset strDo + 1    ; next char will be 'o'
+        mov     si, offset strDont + 1  ; next char will be 'o'
+        jmp     @@80                    ; reset DFA state and terminate
+@@01:
+        cmp     dl, [di]                ; Match in strDo?
+        jne     @@02                    ;   No, reset and check strDont
+        inc     di                      ;   Yes, increment ptrDo
+        jmp     @@03                    ; Go to check strDont
+@@02:
+        mov     di, offset strDo        ; reset PtrDo
+@@03:
+        cmp     dl, [si]                ; Match in ptrDont?
+        jne     @@05                    ;   No, reset and check for digit
+        inc     si                      ;   Yes, increment ptrDont
+        jmp     @@80                    ; reset DFA state and terminate
+@@05:
+        mov     si, offset strDont      ; reset ptrDont
 ;------ Match with digit 0..9
         cmp     dl, '0'                 ; Is char < '0' ?
         jb      @@10                    ;   Yes, go to alpha match
@@ -180,6 +209,8 @@ PROC    DoTransition
         inc     bl                      ; Increment state
         cmp     bl, 6                   ; Is > 5 ?
         jne     @@90                    ;   No, go to end
+        cmp     [doMul], 1              ; Are Muls enabled?
+        jne     @@90                    ;   No, go to end
         mov     ax, [intY]              ;   Yes, add [intY] (low byte)
         add     [sumL], ax              ;     to [sumL]
         mov     ax, [intZ]              ; Add [intX] (high byte)
@@ -187,7 +218,19 @@ PROC    DoTransition
 @@80:
         xor     bx, bx                  ; Reset state to 0
 @@90:
+        cmp     [byte ptr di], 0                 ; End of strDo ?
+        jne     @@95                    ;   no, jump
+        mov     di, offset strDo        ;   yes, reset ptrDo
+        mov     [doMul], 1              ; And enable Muls
+@@95:
+        cmp     [byte ptr si], 0                 ; End of strDont?
+        jne     @@99                    ;   no, jump
+        mov     si, offset strDont      ;   yes, reset ptrDo
+        mov     [doMul], 0              ; And disable Muls
+@@99:
         mov     [state], bl             ; Store next state
+        mov     [ptrDo], di             ; Store next ptrDo
+        mov     [ptrDont], si           ; Store next ptrDont
         ret                             ; Return to caller
 ENDP    DoTransition
 %NEWPAGE

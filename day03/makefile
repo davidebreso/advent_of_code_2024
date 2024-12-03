@@ -2,7 +2,7 @@ AS   = tasm.exe
 LINK = tlink.exe
 RM   = del
 
-all: day03_01.exe
+all: day03_01.exe day03_02.exe
 
 # Implicit rule for executables
 .obj.exe:
