@@ -5,7 +5,7 @@ RM   = del
 OBJS = strings.obj strio.obj binasc.obj screen.obj keyboard.obj \
        diskerr.obj params.obj
 
-all: day06_01.exe
+all: day06_01.exe day06_02.exe
 
 # Implicit rule for OBJ linking
 .obj.exe:

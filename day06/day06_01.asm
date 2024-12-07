@@ -120,102 +120,68 @@ Exit:
 ;       ax, bx, cx, dx, di, si
 ;---------------------------------------------------------------------
 PROC    LoadMap
-        push    es                      ; Save registers
 
-        mov     ax, 0B800h              ; Set ES to
-        mov     es, ax                  ;    CGA screen address
-        mov     si, 2000h               ; ES:SI points to line 1
-        mov     di, si                  ; ES:DI points to line 1
-        mov     al, 03h                 ; Draw white pixel
-        stosb
+        mov     cx, 0                   ; CX is pixel X coordinate
+        mov     dx, 1                   ; DX is pixel Y coordinate
+        xor     bx, bx                  ; Page number is zero
+        mov     ax, 0C03h               ; Video - Draw white pixel
+        int     10h                     ; Call Video BIOS
 
-;------ Read Input from STDIN one line at a time
-        mov     dx, offset buffer       ; DS:DX points to input buffer
-        xor     bx, bx                  ; Zero line width counter
+;------ Read Input from STDIN one character at a time
 @@10:
-        push    bx                      ; Save BX for later
+        push    cx                      ; Save current pixel position
+        push    dx
         mov     ah, 3Fh                 ; DOS - Read from file
-        mov     bx, 0                   ; STDIN file handle
-        mov     cx, 4                   ; Read 4 chars
+        xor     bx, bx                  ; STDIN file handle
+        mov     cx, 1                   ; Read 1 char
+        mov     dx, offset buffer       ; DS:DX points to input buffer
         int     21h                     ; Call DOS to read one line
-        pop     bx                      ; Restore line width counter
+        pop     dx                      ; Restore current pixel position
+        pop     cx
         or      ax, ax                  ; Check if EOF
         jz      @@90                    ;   Terminate if EOF
-        xor     ah, ah                  ; Zero pixels to draw
-        push    si                      ; Save SI for later
-        mov     si, offset buffer       ; DS:SI points to buffer
-        mov     cx, 4                   ; draw 4 pixels
-@@20:
-        lodsb                           ; Load char in AL
-        shl     ah, 1
-        shl     ah, 1                   ; Shift pixel block by 2
-        cmp     al, 0Dh                 ; Is it CR ?
-        je      @@30                    ; Yes, go to line update
-        cmp     al, '^'                 ; Found start point?
-        jne     @@25                    ;   no, continue as normal
-        or      ah, 02h                 ; Color pixel pink
-        mov     [posX], bx              ; Save starting X position
-        push    bx                      ; Save BX to stack
-        mov     bx, [mapHeight]
-        mov     [posY], bx              ; Save starting Y position
-        pop     bx                      ; Restore BX
-@@25:
-        and     al, 001h                ; Keep only LSB
-        or      ah, al                  ; Store pixel color
-        inc     bx                      ; Increment line width counter
-        loop    @@20
-        mov     al, ah                  ; Set pixel colors
-        stosb                           ; Draw 4 pixels
-        pop     si                      ; Restore SI
-        jmp     @@10                    ; Loop
-@@30:
-        or      ah, 03h                 ; Set white pixel
-        dec     cl
-        shl     ah, cl                  ; Shift reminder pixels
-        shl     ah, cl
-        mov     al, ah                  ; Set pixel colors
-        stosb                           ; Draw 4 pixel
-        pop     si                      ; Restore SI
-        mov     [mapWidth], bx          ; save line width value to [width]
-        xor     bx, bx                  ;   and reset line width counter
-        inc     [mapHeight]             ; Increment number of lines
 
-        xor     si, 02000h              ; Switch to other half of screen
-        test    si, 02000h
-        jnz     @@40                    ; Are we on the odd half?
-        add     si, 80                  ;   No, add 80 byte to pointer
+        mov     ax, 0C01h               ; Video - write cyan pixel
+        mov     bl, [buffer]            ; Load character in BL
+        cmp     bl, 0Ah                 ; Is it LF?
+        je      @@10                    ;  yes, skip to next char
+        inc     cx                      ; Increment X coordinate
+        cmp     bl, 0Dh                 ; Is it CR ?
+        je      @@40                    ; Yes, go to line update
+        cmp     bl, '^'                 ; Found start point?
+        je      @@20                    ;   yes, jump
+        cmp     bl, '#'                 ; Found obstacle?
+        je      @@30                    ;   yes, go to pixel draw
+        jmp     @@10                    ; Loop to next char
+@@20:
+        mov     al, 02h                 ; Set pixel color to pink
+        mov     [posX], cx              ; Save starting X position
+        mov     [posY], dx              ; Save starting Y position
+@@30:
+        int     10h                     ; Call BIOS to write pixel
+        jmp     @@10                    ; Loop to next char
+
 @@40:
-        mov     di, si                  ; ES:DI points to start of next line
-        mov     al, 03h                 ; Draw white border
-        stosb
+        mov     [mapWidth], cx          ; Save line width
+        mov     ax, 0C03h               ; Video - write white pixel
+        int     10h                     ; Call BIOS to draw border
+        xor     cx, cx                  ; Reset X position to 0
+        inc     dx                      ; Increment Y position
+        int     10h                     ; Call Video BIOS
         jmp     @@10                    ; Loop
 
 @@90:
-        xor     di, di                  ; ES:DI points to start of screen
-        mov     al, 03h                 ; White left border
-        stosb
-        xchg    di, si
-        stosb                           ; Write white left border
-        mov     ax, [mapWidth]          ; AX is line width
-        xor     dx, dx                  ; Zero DX for division
-        mov     bx, 4                   ; Divide by 4 to
-        div     bx                      ;  convert to bytes (reminder in DX)
-        mov     cx, ax                  ; converted to bytes
-        push    cx                      ; Save CX for later
-        mov     al, 0FFh                ; Write white horizontal line
-        rep     stosb
-        xchg    di, si
-        pop     cx
-        rep     stosb
-        mov     cl, 3
-        sub     cl, dl                  ; Compute last byte shift
-        shl     al, cl
-        shl     al, cl
-        stosb
-        xchg    di, si
-        stosb
+        mov     [mapHeight], dx         ; Save Map height
+        mov     cx, [mapWidth]          ; Prepare to draw [mapWidth] pixels
+        mov     ax, 0C03h               ; Video - write white pixel
+@@95:
+        mov     dx, [mapHeight]         ; Load Y coordinate of lower border
+        int     10h                     ; Call BIOS to draw lower border
+        xor     dx, dx                  ; Set Y coordinate to 0
+        int     10h                     ; Call BIOS to draw upper border
+        loop    @@95                    ; Loop
+        int     10h                     ; Draw pixel at (0, 0)
 
-        pop     es                      ; Restore registers
         ret                     ; Return to caller
 ENDP    LoadMap
 %NEWPAGE
@@ -232,9 +198,7 @@ ENDP    LoadMap
 PROC    Animate
 
         mov     cx, [posX]      ; Load X position in CX
-        add     cx, 4           ; Convert to absolute screen position
         mov     dx, [posY]      ; Load Y position in CX
-        inc     dx              ; Convert to absolute screen position
         mov     bx, 00FFh       ; Load direction of movement up (0, -1)
         push    bx              ;  and save it to stack
         mov     [count], 1      ; Reset pink pixel counter
