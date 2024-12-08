@@ -29,6 +29,7 @@ mapWidth        DW      0               ; Map width
 mapHeight       DW      0               ; Map height
 count           DW      1               ; Obstacle distance count
 loops           DW      0               ; Number of loops
+steps           DW      ?               ; Nuber of steps (local to Animate)
 posX            DW      ?               ; Current guard position
 posY            DW      ?               ;
 dir             DW      ?               ; Current direction of movement
@@ -66,50 +67,27 @@ Start:
         mov     di, offset videoBuf     ; ES:DI points to video buffer
         call    SaveScreen              ; Save content of video memory
 
-        mov     ax, 1                   ; Start with obstacle count = 1
+        mov     [count], 1              ; Start with obstacle count = 1
 @@10:
-        mov     [count], ax             ; Save obstacle distance count
-        push    ax                      ;  also on the stack
+        mov     ax, [count]             ; Set obstacle count
         call    Animate                 ; Animate guard movements
         cmp     [flag], 1               ; Test termination flag
         jz      @@20                    ;   stop search if = 1
         mov     si, offset videoBuf     ; DS:SI points to video buffer
         call    LoadScreen              ; Restore map with no path
-        pop     ax                      ; Restore obstacle count
-        inc     ax                      ; Increment for next search
+        inc     [count]                 ; Increment obstacle count
         jmp     @@10                    ; Go to next try
 
 ;------ Print results to screen
 @@20:
         mov     ah, 02h                 ; Video BIOS - Set cursor position
         mov     bh, 0                   ; Page is 0 in graphics mode
-        mov     dx, 1800h               ; row 24, column 0
+        mov     dx, 1800h               ; row 24, column 20
         int     10h                     ; Call BIOS to set pos
-        mov     ax, [mapWidth]          ; Convert mapWidth
+        mov     ax, [loops]             ; Convert loops
         mov     di, offset buffer       ;   to string in buffer
         mov     cx, 1                   ;   using at least one digit
         call    BinToAscDec             ; Do conversion
-        mov     al, ' '                 ; Replace NULL with space
-        stosb
-        mov     ax, [mapHeight]         ; Convert mapHeight
-        mov     cx, 1                   ;   using at least one digit
-        call    BinToAscDec             ; Do conversion
-        mov     al, ' '                 ; Replace NULL with space
-        stosb
-        mov     ax, [posX]              ; Convert [posX]
-        mov     cx, 1                   ;   using at least one digit
-        call    BinToAscDec             ; Do conversion
-        mov     al, ' '                 ; Replace NULL with space
-        stosb
-        mov     ax, [posY]              ; Convert [posY]
-        mov     cx, 1                   ;   using at least one digit
-        call    BinToAscDec             ; Do conversion
-        mov     al, ' '                 ; Replace NULL with space
-        stosb
-        mov     ax, [loops]             ; Convert [loops]
-        mov     cx, 1                   ;   using at least one digit
-        call    BinToAscDec             ; Do conversion
-
         mov     di, offset buffer       ; ES:DI points to full string
         call    StrWrite                ;  print result to screen
 
@@ -143,8 +121,8 @@ PROC    LoadMap
         mov     cx, 0                   ; CX is pixel X coordinate
         mov     dx, 1                   ; DX is pixel Y coordinate
         xor     bx, bx                  ; Page number is zero
-        mov     ax, 0C07h               ; Video - Draw white pixel
-        int     10h                     ; Call Video BIOS
+        mov     al, 07h                 ; Draw white pixel
+        call    DrawPixel               ; Call Video BIOS
 
 ;------ Read Input from STDIN one character at a time
 @@10:
@@ -160,7 +138,7 @@ PROC    LoadMap
         or      ax, ax                  ; Check if EOF
         jz      @@90                    ;   Terminate if EOF
 
-        mov     ax, 0C0Bh               ; Video - write cyan pixel
+        mov     al, 0Bh                 ; Prepare to write cyan pixel
         mov     bl, [buffer]            ; Load character in BL
         cmp     bl, 0Ah                 ; Is it LF?
         je      @@10                    ;  yes, skip to next char
@@ -177,29 +155,29 @@ PROC    LoadMap
         mov     [posX], cx              ; Save starting X position
         mov     [posY], dx              ; Save starting Y position
 @@30:
-        int     10h                     ; Call BIOS to write pixel
+        call    DrawPixel               ; Call BIOS to write pixel
         jmp     @@10                    ; Loop to next char
 
 @@40:
         mov     [mapWidth], cx          ; Save line width
-        mov     ax, 0C07h               ; Video - write white pixel
-        int     10h                     ; Call BIOS to draw border
+        mov     al, 07h                 ; Draw white pixel
+        call    DrawPixel               ; Call BIOS to draw border
         xor     cx, cx                  ; Reset X position to 0
         inc     dx                      ; Increment Y position
-        int     10h                     ; Call Video BIOS
+        call    DrawPixel               ; Call Video BIOS
         jmp     @@10                    ; Loop
 
 @@90:
         mov     [mapHeight], dx         ; Save Map height
         mov     cx, [mapWidth]          ; Prepare to draw [mapWidth] pixels
-        mov     ax, 0C07h               ; Video - write white pixel
+        mov     al, 07h                 ; Prepare to write white pixel
 @@95:
         mov     dx, [mapHeight]         ; Load Y coordinate of lower border
-        int     10h                     ; Call BIOS to draw lower border
+        call    DrawPixel               ; Call BIOS to draw lower border
         xor     dx, dx                  ; Set Y coordinate to 0
-        int     10h                     ; Call BIOS to draw upper border
+        call    DrawPixel               ; Call BIOS to draw upper border
         loop    @@95                    ; Loop
-        int     10h                     ; Draw pixel at (0, 0)
+        call    DrawPixel               ; Draw pixel at (0, 0)
 
         ret                     ; Return to caller
 ENDP    LoadMap
@@ -208,10 +186,10 @@ ENDP    LoadMap
 ; Animate       Compute guard movement and draw it to screen
 ;---------------------------------------------------------------------
 ; Input:
-;       none
+;       ax = obstacle count
 ; Output:
 ;       [posX], [posY], [dir] updated
-;       new obstacle is placed at [count] steps from start
+;       new obstacle is placed at ax steps from start
 ;       [loops] incremented if loop found
 ; Registers:
 ;       ax, bx, cx, dx, di, si
@@ -219,16 +197,15 @@ ENDP    LoadMap
 PROC    Animate
 
         mov     cx, [posX]      ; Load X position in CX
-        mov     dx, [posY]      ; Load Y position in CX
+        mov     dx, [posY]      ; Load Y position in DX
         mov     [dir], 00FFh    ; Initial direction of movement up (0, -1)
         mov     [flag], 1       ; Set termination flag to 1
+        mov     [steps], ax     ; Save obstacle count to [steps]
 @@10:
         mov     bx, [dir]       ; Restore direction of movement
         add     cl, bh          ; Compute next X position
         add     dl, bl          ; Compute next Y position
-        xor     bx, bx          ; Set video page to 0
-        mov     ah, 0Dh         ; Video BIOS - Read graphic pixel
-        int     10h             ; Get pixel color in AL
+        call    ReadPixel       ; Get pixel color in AL
         cmp     al, 07h         ; Is it white?
         je      @@90            ;   yes, terminate
         cmp     al, 0Bh         ; Is it cyan?
@@ -237,7 +214,7 @@ PROC    Animate
         jne     @@60            ;   no, go to check pixel color
 
 ;------ check obstacle limit
-        dec     [count]         ; Decrement count
+        dec     [steps]         ; Decrement steps
         jnz     @@60            ; Go to draw pixel if count != 0
         mov     [flag], 0       ; Obstacle placed, set termination flag to 0
         jmp     @@70            ; Go to turn right
@@ -251,15 +228,12 @@ PROC    Animate
         cmp     al, bl          ; Is it the same of the current pixel?
         je      @@80            ;   yes, go to save result and terminate
 
-        mov     ah, 0Ch         ; Video BIOS - write pixel
-        mov     al, bl          ;   with pixel color in AL
-        xor     bx, bx          ;   to page 0
-        int     10h             ; Call BIOS to draw pixel
+        mov     al, bl          ; Set pixel color in AL
+        call    DrawPixel       ; Call BIOS to draw pixel
         jmp     @@10            ; Continue animation
 @@70:
-        mov     ax, 0C0Bh       ; Put obstacle cyan pixel in current position
-        xor     bx, bx          ;   select page 0
-        int     10h             ; Call BIOS to draw pixel
+        mov     al, 0Bh         ; Put obstacle cyan pixel in current position
+        call    DrawPixel       ; Call BIOS to draw pixel
         mov     bx, [dir]       ; Restore current movement in BX
         sub     cl, bh          ; Revert movement
         sub     dl, bl
@@ -275,6 +249,57 @@ PROC    Animate
 @@90:
         ret                     ; Return to caller
 ENDP    Animate
+%NEWPAGE
+;---------------------------------------------------------------------
+; DrawPixel     Use BIOS calls to draw pixel to screen
+;---------------------------------------------------------------------
+; Input:
+;       al = pixel color
+;       cx = X coordinate
+;       dx = Y coordinate
+; Output:
+;       none
+; Registers:
+;       none
+;---------------------------------------------------------------------
+PROC    DrawPixel
+        push    ax                      ; Save registers
+        push    bx
+        push    cx
+        push    dx
+        mov     ah, 0Ch                 ; Video - write pixel
+        xor     bx, bx                  ;   to page 0
+        int     10h                     ; Call BIOS to draw pixel
+        pop     dx                      ; Restore registers
+        pop     cx
+        pop     bx
+        pop     ax
+        ret                             ; Return to caller
+ENDP    DrawPixel
+%NEWPAGE
+;---------------------------------------------------------------------
+; ReadPixel     Use BIOS calls to read pixel color from screen
+;---------------------------------------------------------------------
+; Input:
+;       cx = X coordinate
+;       dx = Y coordinate
+; Output:
+;       al = color of pixel at (X, Y)
+; Registers:
+;       al
+;---------------------------------------------------------------------
+PROC    ReadPixel
+        push    bx                      ; Save registers
+        push    cx
+        push    dx
+        mov     ah, 0Dh                 ; Video - read pixel
+        xor     bx, bx                  ;   from page 0
+        int     10h                     ; Call BIOS to read pixel
+        pop     dx                      ; Restore registers
+        pop     cx
+        pop     bx
+        ret                             ; Return to caller
+ENDP    ReadPixel
 %NEWPAGE
 ;---------------------------------------------------------------------
 ; SaveScreen            ; Save video memory to buffer
