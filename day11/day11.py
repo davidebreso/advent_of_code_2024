@@ -1,35 +1,33 @@
+from itertools import repeat
+
 infile = open("input.txt")
 
-def blink(stones):
-    res = []
-    for stone in stones:
-        if stone == 0:
-            res.append(1)
-            continue
+memo = dict()
+
+def blink(stone, n):
+    if n == 0:
+        return 1
+    if (stone, n) in memo:
+        return memo[stone, n]
+    if stone == 0:
+        res = blink(1, n - 1)
+    else: 
         sstone = str(stone)
         l = len(sstone)
         if l % 2 == 0:
             h = l // 2
-            res.append(int(sstone[:h]))
-            res.append(int(sstone[h:]))
+            res = blink(int(sstone[:h]), n - 1) + blink(int(sstone[h:]), n - 1)
         else:
-            res.append(stone*2024)
+            res = blink(stone*2024, n - 1)
+    memo[stone, n] = res
     return res
 
-stones = map(int, infile.read().split())
+stones = list(map(int, infile.read().split()))
 
-for i in range(25):
-    #print(stones)
-    stones = blink(stones)
+result = sum(map(blink, stones, repeat(25)))
+print("Part 1:", result)
 
-#print(stones)
-print(len(stones))
+result = sum(map(blink, stones, repeat(75)))
+print("Part 2:", result)
 
-print("more blinking")
-for i in range(50):
-    #print(stones)
-    print(i)
-    stones = blink(stones)
-
-print(len(stones))
     
