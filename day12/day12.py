@@ -31,60 +31,75 @@ def compute(rid, x, y, grid, xmax, ymax):
     perimeter = lp + rp + up + dp
     return(area, perimeter)
 
-def check_corner(rid, x, y, grid, xmax, ymax):
-    n = []
+def add_h_segment(x1, y1, x2, y2, sides):
+    change = True
+    while change:
+        change = False
+        for (x3, y3, x4, y4) in sides:
+            if x3 == x4 == x1:
+                if y2 == y3:
+                    sides.remove((x3, y3, x4, y4))
+                    (x1, y1, x2, y2) = (x1, y1, x4, y4)
+                    change = True
+                    break
+                elif y4 == y1:
+                    sides.remove((x3, y3, x4, y4))
+                    (x1, y1, x2, y2) = (x3, y3, x2, y2)
+                    change = True
+                    break
+    sides.add((x1, y1, x2, y2))
+
+def add_v_segment(x1, y1, x2, y2, sides):
+    change = True
+    while change:
+        change = False
+        for (x3, y3, x4, y4) in sides:
+            if y3 == y4 == y1:
+                if x2 == x3:
+                    sides.remove((x3, y3, x4, y4))
+                    (x1, y1, x2, y2) = (x1, y1, x4, y4)
+                    change = True
+                    break
+                elif x4 == x1:
+                    sides.remove((x3, y3, x4, y4))
+                    (x1, y1, x2, y2) = (x3, y3, x2, y2)
+                    change = True
+                    break
+    sides.add((x1, y1, x2, y2))
+
+def compute_discount(x, y, grid, xmax, ymax, sides):
+    rid = grid[x][y]
+    grid[x][y] = rid.upper()
+    area = 1
     if x > 0:
-        if y > 0:
-            n.append(grid[x - 1][y - 1].lower())
-        else:
-            n.append("#")
-        if y <= xmax:
-            n.append(grid[x - 1][y].lower())
-        else:
-            n.append("#")
+        if grid[x - 1][y] == rid:
+            area += compute_discount(x - 1, y, grid, xmax, ymax, sides)
+        elif grid[x - 1][y] != rid.upper():
+            add_h_segment(x, y, x, y + 1, sides)
     else:
-        n.extend(['#', '#'])        
-    if x <= xmax:
-        if y > 0:
-            n.append(grid[x][y - 1].lower())
-        else:
-            n.append('#')
-        if y <= ymax:
-            n.append(grid[x][y].lower())
-        else:
-            n.append('#')
+        add_h_segment(x, y, x, y + 1, sides)
+    if x < xmax:
+        if grid[x + 1][y] == rid:
+            area += compute_discount(x + 1, y, grid, xmax, ymax, sides)
+        elif grid[x + 1][y] != rid.upper():
+            add_h_segment(x + 1, y, x + 1, y + 1, sides)
     else:
-        n.extend(['#', '#'])  
-    matches = n.count(rid)
-    return (matches == 3) or (matches == 1) or (matches == 2 and n[0] == n[3])    
-    
-def compute_discount(rid, sx, sy, grid, xmax, ymax):
-    ry = ymax
-    for y in range(sy + 1, ymax + 1):
-        if grid[sx][y] != rid:
-            ry = y - 1
-            break
-        grid[sx][y] = rid.upper()        
-    grid[sx][ry] = rid.upper()        
-    ly = 0
-    for y in range(sy - 1, -1, -1):
-        if grid[sx][y] != rid:
-            ly = y + 1
-            break
-        grid[sx][y] = rid.upper()
-    grid[sx][ly] = rid.upper()                
-    grid[sx][sy] = rid.upper()
-    #print(rid, "line at", sx,"from",ly,"to", ry)
-    area = ry - ly + 1
-    if sx > 0:
-        for y in range(ly, ry + 1):
-            if grid[sx - 1][y] == rid:
-                area += compute_discount(rid, sx - 1, y, grid, xmax, ymax)
-    if sx < xmax:
-        for y in range(ly, ry + 1):
-            if grid[sx + 1][y] == rid:
-                area += compute_discount(rid, sx + 1, y, grid, xmax, ymax)
-    return area        
+        add_h_segment(x + 1, y, x + 1, y + 1, sides)
+    if y > 0:
+        if grid[x][y - 1] == rid:
+            area += compute_discount(x, y - 1, grid, xmax, ymax, sides)
+        elif grid[x][y - 1] != rid.upper():
+            add_v_segment(x, y, x + 1, y, sides)
+    else:
+        add_v_segment(x, y, x + 1, y, sides)
+    if y < ymax:
+        if grid[x][y + 1] == rid:
+            area += compute_discount(x, y + 1, grid, xmax, ymax, sides)
+        elif grid[x][y + 1] != rid.upper():
+            add_v_segment(x, y + 1, x + 1, y + 1, sides)
+    else:
+        add_v_segment(x, y + 1, x + 1, y + 1, sides)
+    return area      
         
 def region_cost(x, y, grid, xmax, ymax):
     if grid[x][y].islower():
@@ -96,9 +111,11 @@ def region_cost(x, y, grid, xmax, ymax):
 def region_discount(x, y, grid, xmax, ymax):
     if grid[x][y].isupper():
         return 0
-    area = compute_discount(grid[x][y], x, y, grid, xmax, ymax)
-    print("Region", grid[x][y], "from", x, y, "has area", area)
-    return area
+    sides = set()
+    area = compute_discount(x, y, grid, xmax, ymax, sides)
+    print("Region", grid[x][y], "from", x, y, "has area", area, "with sides", sides)
+    #input()
+    return area * len(sides)
     
 xsize = len(grid)
 ysize = len(grid[0])    
