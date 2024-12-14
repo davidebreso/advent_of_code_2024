@@ -67,38 +67,38 @@ def add_v_segment(x1, y1, x2, y2, sides):
                     break
     sides.add((x1, y1, x2, y2))
 
-def compute_discount(x, y, grid, xmax, ymax, sides):
+def compute_discount(x, y, grid, xmax, ymax, segments):
     rid = grid[x][y]
     grid[x][y] = rid.upper()
     area = 1
     if x > 0:
         if grid[x - 1][y] == rid:
-            area += compute_discount(x - 1, y, grid, xmax, ymax, sides)
+            area += compute_discount(x - 1, y, grid, xmax, ymax, segments)
         elif grid[x - 1][y] != rid.upper():
-            add_h_segment(x, y, x, y + 1, sides)
+            segments.add((x, y, x, y + 1))
     else:
-        add_h_segment(x, y, x, y + 1, sides)
+        segments.add((x, y, x, y + 1))
     if x < xmax:
         if grid[x + 1][y] == rid:
-            area += compute_discount(x + 1, y, grid, xmax, ymax, sides)
+            area += compute_discount(x + 1, y, grid, xmax, ymax, segments)
         elif grid[x + 1][y] != rid.upper():
-            add_h_segment(x + 1, y, x + 1, y + 1, sides)
+            segments.add((x + 1, y, x + 1, y + 1))
     else:
-        add_h_segment(x + 1, y, x + 1, y + 1, sides)
+        segments.add((x + 1, y, x + 1, y + 1))
     if y > 0:
         if grid[x][y - 1] == rid:
-            area += compute_discount(x, y - 1, grid, xmax, ymax, sides)
+            area += compute_discount(x, y - 1, grid, xmax, ymax, segments)
         elif grid[x][y - 1] != rid.upper():
-            add_v_segment(x, y, x + 1, y, sides)
+            segments.add((x, y, x + 1, y))
     else:
-        add_v_segment(x, y, x + 1, y, sides)
+        segments.add((x, y, x + 1, y))
     if y < ymax:
         if grid[x][y + 1] == rid:
-            area += compute_discount(x, y + 1, grid, xmax, ymax, sides)
+            area += compute_discount(x, y + 1, grid, xmax, ymax, segments)
         elif grid[x][y + 1] != rid.upper():
-            add_v_segment(x, y + 1, x + 1, y + 1, sides)
+            segments.add((x, y + 1, x + 1, y + 1))
     else:
-        add_v_segment(x, y + 1, x + 1, y + 1, sides)
+        segments.add((x, y + 1, x + 1, y + 1))
     return area      
         
 def region_cost(x, y, grid, xmax, ymax):
@@ -108,14 +108,54 @@ def region_cost(x, y, grid, xmax, ymax):
     # print("Region", grid[x][y], "from", x, y, "has cost", area * perimeter)
     return area * perimeter
     
+def walk(x, y, dx, dy, segments, visited, xmax, ymax):
+    if (x, y) in visited:
+        return 0
+    #print("Walking", x, y, dx, dy)
+    visited.add((x, y))
+    corners = 0
+    if dx == 0:
+        # Horizontal movement direction. Try to find a corner first
+        if (x, y, x+1, y) in segments:
+            # Change direction to NORTH and continue walk
+            corners += 1 + walk(x+1, y, 1, 0, segments, visited, xmax, ymax)
+        if (x - 1, y, x, y) in segments:
+            # Change direction to SOUTH and continue walk
+            corners += 1 + walk(x - 1, y, -1, 0, segments, visited, xmax, ymax)
+    else:
+        # Vertical movement direction. Try to find a corner first
+        if (x, y, x, y+1) in segments:
+            # Change direction to EAST and continue walk
+            corners += 1 + walk(x, y+1, 0, 1, segments, visited, xmax, ymax)
+        if (x, y - 1, x, y) in segments:
+            # Change direction to WEST and continue walk
+            corners += 1 + walk(x, y-1, 0, -1, segments, visited, xmax, ymax)
+    # No corners, go straight
+    (x1, y1, x2, y2) = (x, y, x + dx, y + dy)
+    if dx < 0 or dy < 0:
+        (x1, y1, x2, y2) = (x2, y2, x1, y1)
+    if (x1, y1, x2, y2) in segments:
+        corners += walk(x + dx, y + dy, dx, dy, segments, visited, xmax, ymax)
+    return corners
+    
+def compute_corners(segments, xmax, ymax):
+    visited = set()
+    corners = 0
+    for (x1, y1, x2, y2) in segments:
+        if (x2, y2) not in visited:
+            corners += walk(x2, y2, x2-x1, y2-y1, segments, visited, xmax, ymax)
+    return corners
+
 def region_discount(x, y, grid, xmax, ymax):
     if grid[x][y].isupper():
         return 0
-    sides = set()
-    area = compute_discount(x, y, grid, xmax, ymax, sides)
-    print("Region", grid[x][y], "from", x, y, "has area", area, "with sides", sides)
+    segments = set()
+    area = compute_discount(x, y, grid, xmax, ymax, segments)
+    perimeter = len(segments)
+    sides = compute_corners(segments, xmax, ymax)
+    #print("Region", grid[x][y], "from", x, y, "has area", area, "with perimeter", perimeter, "and sides", sides)
     #input()
-    return area * len(sides)
+    return area * sides
     
 xsize = len(grid)
 ysize = len(grid[0])    
