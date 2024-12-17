@@ -1,19 +1,20 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
-#define BUFLEN 1024
+#define BUFLEN 128
 
 struct registers {
-  int a;
-  int b;
-  int c;
-  int pc; 
+  long a;
+  long b;
+  long c;
+  long pc; 
   char *output; 
 };
 
-int jumps = 0;
+long jumps = 0;
 
-int combo(int operand, const struct registers *regs) {
+long combo(long operand, const struct registers *regs) {
     if (operand < 4) return operand;
     switch(operand) {
         case 4:
@@ -27,22 +28,22 @@ int combo(int operand, const struct registers *regs) {
     return -1;
 }
 
-void adv(int operand, struct registers *regs) {
+void adv(long operand, struct registers *regs) {
     regs->a = regs->a >> combo(operand, regs);
     regs->pc += 2;
 }
 
-void bxl(int operand, struct registers *regs) {
+void bxl(long operand, struct registers *regs) {
     regs->b = regs->b ^ operand;
     regs->pc += 2;
 }
 
-void bst(int operand, struct registers *regs) {
+void bst(long operand, struct registers *regs) {
     regs->b = combo(operand, regs) & 7;
     regs->pc += 2;
 }
 
-void jnz(int operand, struct registers *regs) {
+void jnz(long operand, struct registers *regs) {
     if(regs->a == 0) {
         regs->pc += 2;
     } else {
@@ -51,40 +52,85 @@ void jnz(int operand, struct registers *regs) {
     }
 }
 
-void bxc(int operand, struct registers *regs) {
+void bxc(long operand, struct registers *regs) {
     regs->b = regs->b ^ regs->c;
     regs->pc += 2;
 }
 
-void out(int operand, struct registers *regs) {
-    regs->output += sprintf(regs->output, "%d,", combo(operand, regs) & 7);
+void out(long operand, struct registers *regs) {
+    regs->output += sprintf(regs->output, "%ld,", combo(operand, regs) & 7);
     regs->pc += 2;
 }
 
-void bdv(int operand, struct registers *regs) {
+void bdv(long operand, struct registers *regs) {
     regs->b = regs->a >> combo(operand, regs);
     regs->pc += 2;
 }
 
-void cdv(int operand, struct registers *regs) {
+void cdv(long operand, struct registers *regs) {
     regs->c = regs->a >> combo(operand, regs);
     regs->pc += 2;
 }
 
 void print_registers(const struct registers *regs) {
-    printf("A: %d\tB: %d\tC: %d\tPC: %d\n", regs->a, regs->b, regs->c, regs->pc);
+    printf("A: %ld\tB: %ld\tC: %ld\tPC: %ld\n", regs->a, regs->b, regs->c, regs->pc);
 }
 
 // opcodes is an array of function pointers
-void (*opcodes[])(int operand, struct registers *regs) = {
+void (*opcodes[])(long operand, struct registers *regs) = {
     adv, bxl, bst, jnz, bxc, out, bdv, cdv
 };
 
+char *execute(const char *program, struct registers *regs) {
+    char *output = malloc(BUFLEN);
+    long progsize = strlen(program);
+    
+    regs->pc = 0;
+    regs->output = output;    
+    while(2 * regs->pc < progsize) {
+        long opcode = program[2 * regs->pc] - '0';
+        long operand = program[2 * (regs->pc + 1)] - '0';
+        opcodes[opcode](operand, regs);
+    }
+    *(regs->output - 1) = '\0';
+    return output;
+}
+
+long check_subkey(long key, int j, char *program, struct registers *regs) {
+    int progsize = strlen(program);
+    char *output;
+    
+    if (j > progsize / 2) return key;
+    
+    // printf("Checking for %c\n", program[progsize - 2*j - 1]);
+    for(long i = 0; i < 8; i++) {
+        struct registers copy;
+        char digit;
+        long subkey = i << 3 * ((progsize / 2) - j);
+        copy.a = key + subkey;
+        copy.b = regs->b;
+        copy.c = regs->c;
+        output = execute(program, &copy);
+        digit = *(copy.output - 2*j - 2);
+        if(digit == program[progsize - 2*j - 1]){
+            // printf("%lo: %s\n", key + subkey, output);
+            subkey = check_subkey(key + subkey, j + 1, program, regs);
+            if(subkey >= 0) {
+                return subkey;
+            }
+        }
+    }
+    return -1;
+}
+
+
 int main(int argc, char **argv) {
     FILE *infile;
-    struct registers regs;
-    char program[BUFLEN], output[BUFLEN];
+    struct registers regs, copy;
+    char program[BUFLEN];
+    char *output;
     int progsize;
+    long key;
 
     if(argc != 2) {
         printf("Usage: %s nomefile\n", argv[0]);
@@ -97,9 +143,9 @@ int main(int argc, char **argv) {
         return 2;
     }
     
-    fscanf(infile, "Register A: %d\n", &regs.a);
-    fscanf(infile, "Register B: %d\n", &regs.b);
-    fscanf(infile, "Register C: %d\n", &regs.c);
+    fscanf(infile, "Register A: %ld\n", &regs.a);
+    fscanf(infile, "Register B: %ld\n", &regs.b);
+    fscanf(infile, "Register C: %ld\n", &regs.c);
     regs.pc = 0;
     regs.output = output;
         
@@ -111,35 +157,24 @@ int main(int argc, char **argv) {
 
     print_registers(&regs);    
     printf("Program: %s\n", program);
-
-    for(int i = 0;  ; i++) {
-        struct registers copy;
-        jumps = 0;
-        if(i < 0) break;
-        copy.a = i;
-        copy.b = regs.b;
-        copy.c = regs.c;
-        copy.pc = 0;
-        copy.output = output;
-        while(2 * copy.pc < progsize && jumps < progsize) {
-            int opcode = program[2 * copy.pc] - '0';
-            int operand = program[2 * (copy.pc + 1)] - '0';
-            //printf("Instruction %d,%d\n", opcode, operand);
-            opcodes[opcode](operand, &copy);
-            //print_registers(&regs);
-            //getchar();
+    
+    copy = regs;
+    output = execute(program, &copy);
+    printf("Program output: %s\n", output);
+    
+    for(long i = 1; i < 8; i++) {
+        copy = regs;
+        char digit;
+        key = i << 3 * (progsize / 2);
+        copy.a = key;
+        output = execute(program, &copy);
+        digit = *(copy.output - 2);
+        if(digit == program[progsize - 1]){
+            key = check_subkey(key, 1, program, &regs);
+            if(key >= 0) break;
         }
-        *(copy.output - 1) = '\0';
-        if(strcmp(program, output) == 0) {
-            printf("\nFor A=%d, program outputs a copy of itself!\n", i);
-            break;
-        } 
-/*        if (i % 65536 == 0) {
-            fflush(stdout);
-            putchar('.');
-        } */
-        // getchar();
     }
-    puts(output);    
+    printf("Found QUINE for A = %ld\n", key);
+    
     return 0;
 }
