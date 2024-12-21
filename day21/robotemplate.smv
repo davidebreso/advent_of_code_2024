@@ -1,0 +1,126 @@
+MODULE numeric_keypad(action)
+VAR
+    position: {b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, bA, empty, fail};
+ASSIGN
+    init(position) := bA;
+    next(position) := case
+        position = b0 & action = u   :   b2;
+        position = b0 & action = l   :   empty;
+        position = b0 & action = r   :   bA;
+        
+        position = b1 & action = u   :   b4;
+        position = b1 & action = d   :   empty;
+        position = b1 & action = r   :   b2;
+        
+        position = b2 & action = u   :   b5;
+        position = b2 & action = d   :   b0;
+        position = b2 & action = l   :   b1;
+        position = b2 & action = r   :   b3;
+
+        position = b3 & action = u   :   b6;
+        position = b3 & action = d   :   bA;
+        position = b3 & action = l   :   b2;
+
+        position = b4 & action = u   :   b7;
+        position = b4 & action = d   :   b1;
+        position = b4 & action = r   :   b5;
+        
+        position = b5 & action = u   :   b8;
+        position = b5 & action = d   :   b2;
+        position = b5 & action = l   :   b4;
+        position = b5 & action = r   :   b6;
+
+        position = b6 & action = u   :   b9;
+        position = b6 & action = d   :   b3;
+        position = b6 & action = l   :   b5;
+
+        position = b7 & action = d   :   b4;
+        position = b7 & action = r   :   b8;
+        
+        position = b8 & action = d   :   b5;
+        position = b8 & action = l   :   b7;
+        position = b8 & action = r   :   b9;
+
+        position = b9 & action = d   :   b6;
+        position = b9 & action = l   :   b8;
+
+        position = bA & action = u   :   b3;
+        position = bA & action = l   :   b0;
+
+        position != empty & action = bA :   position;
+        action = empty                  : position;
+        
+        TRUE                        : fail;
+    esac;
+DEFINE
+    output := case
+        action = bA  : position;
+        TRUE        : empty;
+    esac;
+    
+MODULE directional_keypad(action)
+VAR
+    position: {u, d, l, r, bA, empty, fail};
+ASSIGN
+    init(position) := bA;
+    next(position) := case
+        position = u & action = d      : d;
+        position = u & action = l      : empty;
+        position = u & action = r      : bA;
+
+        position = d & action = u      : u;
+        position = d & action = l      : l;
+        position = d & action = r      : r;
+
+        position = l & action = u      : empty;
+        position = l & action = r      : d;
+
+        position = r & action = u      : bA;
+        position = r & action = l      : d;
+
+        position = bA & action = d      : r;
+        position = bA & action = l      : u;
+        
+        position != empty & action = bA : position;
+        action = empty                  : position;
+        
+        TRUE                            : fail;
+    esac;
+DEFINE
+    output := case
+        action = bA : position;
+        TRUE        : empty;
+    esac;
+
+MODULE code(output)
+VAR
+    mode: {d1, d2, d3, dA, ok, error};
+ASSIGN 
+    init(mode) := d1;
+    next(mode) := case
+        mode = d1 & output = b##E1## : d2;
+        mode = d2 & output = b##E2## : d3;
+        mode = d3 & output = b##E3## : dA;
+        mode = dA & output = bA : ok;
+        mode = ok               : ok;
+        output = empty          : mode;
+        TRUE                    : error;
+    esac;
+
+MODULE main
+IVAR
+    action: {u, d, l, r, bA};
+VAR
+    dpad1:      directional_keypad(action);
+    dpad2:      directional_keypad(dpad1.output);
+    key:        numeric_keypad(dpad2.output);
+    monitor:    code(key.output);
+
+INVARSPEC monitor.mode != ok;
+
+
+
+
+
+
+                        
