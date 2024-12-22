@@ -2,9 +2,20 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <uthash.h>
 
 #define BUFLEN 2048
 #define STEPS 2000
+
+struct strategy {
+    int sequence;               /* Packed price change sequence (Key) */
+    int lastbuyer;              /* Last buyer that has seen the sequence */
+    int bananas;                /* Current return of the strategy */
+    
+    UT_hash_handle hh;          /* makes this structure hashable */
+};
+
+struct strategy *market = NULL;
 
 int simulate(int secret, int steps) {
     // printf("%d\n", secret);
@@ -75,34 +86,30 @@ int *compute_changes(int *prices, int steps) {
  * Compute number of bananas you can buy for each sequence
  */
 int compute_bananas(int **prices, int **changes, int steps, int buyers) {
-    int **bananas = malloc(buyers * sizeof(int *));
+    struct strategy *s;
     int maxbananas = 0;
     
     for(int i = 0; i < buyers; i++) {
-        bananas[i] = malloc((steps - 3) * sizeof(int));
         for(int j = 4; j <= steps; j++) {
             int sequence = changes[i][j];
             int currbananas = prices[i][j];
-            /* Check if the current buyer has already seen the sequence */
-            for(int k = 4; k < j;  k++) {
-                if(changes[i][k] == sequence) {
-                    currbananas = bananas[i][k];
-                    goto save_result;
-                }
+            /* Check if the sequence has been previously seen */
+            HASH_FIND_INT(market, &sequence, s);
+            if(s == NULL) {
+                /* Add strategy to market */
+                s = (struct strategy *)malloc(sizeof(struct strategy));
+                s->sequence = sequence;
+                s->lastbuyer = i;
+                s->bananas = currbananas;
+                HASH_ADD_INT(market, sequence, s);  /* sequence: name of key field */
+            } else if(s->lastbuyer < i) {
+                /* First time for this buyer, update strategy */
+                s->lastbuyer = i;
+                s->bananas += currbananas;
             }
-            /* Check previous buyers */
-            for(int k = i - 1; k >= 0; k--) {
-                for(int l = steps; l > 3; l--) {
-                    if(changes[k][l] == sequence) {
-                        currbananas += bananas[k][l];
-                        goto save_result;
-                    }
-                }
+            if(s->bananas > maxbananas) {
+                maxbananas = s->bananas;
             }
-save_result:
-            bananas[i][j] = currbananas;
-            if(currbananas > maxbananas)
-                maxbananas = currbananas;
         }
     }
     
