@@ -83,7 +83,7 @@ int *compute_changes(int *prices, int steps) {
 }
 
 /*
- * Compute number of bananas you can buy for each sequence
+ * Compute maximum number of bananas you can buy
  */
 int compute_bananas(int **prices, int **changes, int steps, int buyers) {
     struct strategy *s;
@@ -96,7 +96,7 @@ int compute_bananas(int **prices, int **changes, int steps, int buyers) {
             /* Check if the sequence has been previously seen */
             HASH_FIND_INT(market, &sequence, s);
             if(s == NULL) {
-                /* Add strategy to market */
+                /* First time for this sequence, add strategy to market */
                 s = (struct strategy *)malloc(sizeof(struct strategy));
                 s->sequence = sequence;
                 s->lastbuyer = i;
@@ -121,7 +121,6 @@ int main(int argc, char **argv) {
     int buyers, secret = 123;
     int *prices[BUFLEN];
     int *changes[BUFLEN];
-    int *bananas[BUFLEN];
     long key;
 
     if(argc != 2) {
@@ -143,8 +142,6 @@ int main(int argc, char **argv) {
         lastsecret = simulate(secret, STEPS);
         prices[buyers] = get_sequence(secret, STEPS);
         changes[buyers] = compute_changes(prices[buyers], STEPS);
-        // printf("%d: %d\n", secret, lastsecret);
-        // print_prices(prices[buyers], changes[buyers], STEPS);
         key += lastsecret;
         buyers++;
     }
