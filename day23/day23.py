@@ -34,6 +34,23 @@ def maximal_clique(graph):
             cliques.append({node})
     return max(cliques, key=len)
 
+def maximum_clique(graph):
+    r = set()
+    p = set(graph.keys())
+    x = set()
+    cliques = BronKerbosh(r, p, x, graph)
+    return max(cliques, key=len)
+    
+def BronKerbosh(r, p, x, graph):
+    if len(p) == 0 and len(x) == 0:
+        return [r]
+    cliques = list()
+    u = (p | x).pop()
+    for v in list(p - graph[u]):
+        cliques.extend(BronKerbosh(r | {v}, p & graph[v], x & graph[v], graph))
+        p.remove(v)
+        x.add(v)
+    return cliques
 
 infile = open(sys.argv[1])
 
@@ -44,6 +61,6 @@ for line in infile:
     graph[t] = graph.get(t, set()) | {s}
 
 print("Part 1:", count_all_3cliques(graph))
-clique = maximal_clique(graph)
+clique = maximum_clique(graph)
 print("Part 2:", ",".join(sorted(clique)))
 
