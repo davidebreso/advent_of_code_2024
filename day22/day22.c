@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <uthash.h>
+#include "uthash.h"
 
 #define BUFLEN 2048
 #define STEPS 2000
@@ -148,6 +148,9 @@ int main(int argc, char **argv) {
     printf("Sum of all secrets is %ld\n", key);
     printf("Maximum number of bananas you can get is %d\n", 
             compute_bananas(prices, changes, STEPS, buyers));
-        
+
+    secret = HASH_COUNT(market);
+    printf("There are %d unique sequences in the market\n", secret); 
+           
     return 0;
 }
